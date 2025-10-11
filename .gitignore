@@ -1,0 +1,7 @@
+# Serena MCP data
+.serena/
+memories/
+*.serena.db
+
+# Claude Code local settings (if you don't want to share MCP config)
+# .claude/
