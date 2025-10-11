@@ -76,6 +76,55 @@ python3 analyze_depth.py captured_images/depth_raw_<タイムスタンプ>.npy
 
 ---
 
+## 🔧 カメラキャリブレーション（Tare Calibration）
+
+食材の体積推定を正確に行うには、カメラ固定後にテーブル面（参照平面）に対するキャリブレーションが必要です。
+
+### calibrate_realsense.py
+**RealSense Tare Calibration スクリプト** 📐
+
+```bash
+sudo /Users/moei/program/D405/venv/bin/python3 calibrate_realsense.py [ground_truth_mm]
+```
+
+**目的:**
+- テーブル面（参照平面）の深度を記録
+- 既知の真の距離（ground truth）に対してカメラを補正
+- 食材の高さ計算の基準を確立
+
+**使い方:**
+
+1. **カメラを固定位置に設置**
+   - オーバーヘッド（真上）から撮影できる位置
+   - カメラが動かないように固定
+
+2. **空のテーブルにレーザー距離計を当てる**
+   - カメラからテーブル面までの正確な距離を測定
+   - 推奨: レーザー距離計使用（精度 ±1mm）
+
+3. **キャリブレーション実行**
+   ```bash
+   # 例: レーザー距離計で測定した距離が 250mm の場合
+   sudo /Users/moei/program/D405/venv/bin/python3 calibrate_realsense.py 250
+   ```
+
+4. **キャリブレーション完了**
+   - `calibration_data.json` に保存される
+   - 以降のスキャンで自動的に使用される
+
+**保存されるデータ:**
+- テーブル距離（メートル）
+- Ground Truth 距離（ミリメートル）
+- 深度スケール
+- キャリブレーション日時
+- 統計情報
+
+**重要:**
+- カメラを移動したらキャリブレーションをやり直す必要があります
+- レーザー距離計がない場合は、定規で測定した距離でも可
+
+---
+
 ## 🍎 食材スキャン専用システム
 
 D405 のベストプラクティスに基づいた食材スキャン専用スクリプトです。
@@ -239,6 +288,54 @@ python3 analyze_food_scan.py apple
    python3 analyze_depth.py captured_images/depth_raw_20251010_223000.npy
    ```
 
+### 🔬 Nutrition5k スタイルスキャンのワークフロー（研究用途・推奨）
+
+1. **カメラを固定してキャリブレーション**
+   ```bash
+   # レーザー距離計でテーブルまでの距離を測定（例: 250mm）
+   sudo /Users/moei/program/D405/venv/bin/python3 calibrate_realsense.py 250
+   # → calibration_data.json が作成される
+   ```
+
+2. **食材をスキャン（Nutrition5k 互換）**
+   ```bash
+   # リンゴをスキャン（デフォルト20フレーム平均）
+   sudo /Users/moei/program/D405/venv/bin/python3 nutrition5k_style_scanner.py apple 20
+
+   # カメラから 7-50cm の距離に食材を配置
+   # 画面に "OPTIMAL (7-50cm)" が表示されたら 's' キーで高品質撮影
+   # または 'c' キーでクイック撮影
+   # 完了したら 'q' キーで終了
+   ```
+
+3. **スキャンデータを確認**
+   ```bash
+   # 保存されたファイルを確認
+   ls nutrition5k_data/imagery/realsense_overhead/
+
+   # 出力例：
+   # rgb_apple_20251010_120000.png
+   # depth_raw_apple_20251010_120000.png (16-bit)
+   # depth_colorized_apple_20251010_120000.png
+   # metadata_apple_20251010_120000.txt
+   ```
+
+4. **スキャンデータを解析**
+   ```bash
+   # データ解析
+   python3 analyze_nutrition5k_data.py apple_20251010_120000
+   # または食材名のみ（最新のスキャンを自動選択）
+   python3 analyze_nutrition5k_data.py apple
+   ```
+
+**利点:**
+- キャリブレーション情報がメタデータに含まれる
+- 研究データセット（Nutrition5k）との互換性
+- 標準化されたデータフォーマット
+- 他の研究者とのデータ共有が容易
+
+---
+
 ### 🍎 食材スキャンのワークフロー（推奨）
 
 1. **食材をスキャン**
@@ -343,11 +440,22 @@ D405/
 │   │   └── metadata_*.txt
 │   ├── tomato/
 │   └── banana/
+├── nutrition5k_data/          # Nutrition5k互換データの保存先 🆕
+│   └── imagery/
+│       └── realsense_overhead/
+│           ├── rgb_*.png
+│           ├── depth_raw_*.png (16-bit)
+│           ├── depth_colorized_*.png
+│           └── metadata_*.txt
+├── calibration_data.json      # キャリブレーションデータ 🆕
 ├── test_pipeline.py           # 動作確認スクリプト
 ├── capture_and_visualize.py   # 一般用可視化・保存スクリプト
 ├── analyze_depth.py           # 深度データ解析スクリプト
+├── calibrate_realsense.py     # 🆕 Tare Calibration スクリプト
 ├── food_scanner.py            # ⭐ 食材スキャン専用スクリプト
 ├── analyze_food_scan.py       # 食材スキャンデータ解析スクリプト
+├── nutrition5k_style_scanner.py  # 🆕 Nutrition5k互換スキャナー
+├── analyze_nutrition5k_data.py   # 🆕 Nutrition5kデータ解析スクリプト
 └── README.md                  # このファイル
 ```
 

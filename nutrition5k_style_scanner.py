@@ -21,6 +21,7 @@ import numpy as np
 import cv2
 import os
 import sys
+import json
 from datetime import datetime
 
 # Nutrition5k スタイルのディレクトリ構造
@@ -32,6 +33,31 @@ os.makedirs(OVERHEAD_DIR, exist_ok=True)
 DEPTH_SCALE_FACTOR = 10000  # 1メートル = 10,000ユニット
 MAX_DEPTH_METERS = 0.4      # 最大深度 0.4m（Nutrition5k仕様）
 MAX_DEPTH_UNITS = int(MAX_DEPTH_METERS * DEPTH_SCALE_FACTOR)  # 4,000
+
+# キャリブレーションデータのパス
+CALIBRATION_FILE = "/Users/moei/program/D405/calibration_data.json"
+
+def load_calibration():
+    """キャリブレーションデータの読み込み"""
+    if not os.path.exists(CALIBRATION_FILE):
+        print(f"\n[警告] キャリブレーションデータが見つかりません: {CALIBRATION_FILE}")
+        print("  → calibrate_realsense.py を先に実行してください")
+        return None
+
+    try:
+        with open(CALIBRATION_FILE, 'r') as f:
+            calibration = json.load(f)
+
+        print(f"\n[キャリブレーション情報]")
+        print(f"  実行日時: {calibration['timestamp']}")
+        print(f"  テーブル距離: {calibration['table_distance_m']:.4f}m")
+        print(f"  Ground Truth: {calibration['ground_truth_mm']}mm")
+        print(f"  深度スケール: {calibration['depth_scale']}")
+
+        return calibration
+    except Exception as e:
+        print(f"\n[警告] キャリブレーションデータの読み込み失敗: {e}")
+        return None
 
 def setup_filters():
     """ポストプロセッシングフィルター"""
@@ -160,6 +186,20 @@ def save_nutrition5k_format(color_image, depth_raw, depth_colorized, dish_id, me
         f.write(f"Depth Encoding: 16-bit, {DEPTH_SCALE_FACTOR} units/meter\n")
         f.write(f"Max Depth: {MAX_DEPTH_METERS}m ({MAX_DEPTH_UNITS} units)\n")
         f.write(f"Frames Averaged: {metadata['frames_averaged']}\n")
+
+        # キャリブレーション情報
+        if metadata.get('calibration'):
+            f.write(f"\n[Calibration]\n")
+            cal = metadata['calibration']
+            f.write(f"  Calibrated: Yes\n")
+            f.write(f"  Calibration Date: {cal['timestamp']}\n")
+            f.write(f"  Table Distance: {cal['table_distance_m']:.4f}m\n")
+            f.write(f"  Ground Truth: {cal['ground_truth_mm']}mm\n")
+        else:
+            f.write(f"\n[Calibration]\n")
+            f.write(f"  Calibrated: No\n")
+            f.write(f"  Note: Run calibrate_realsense.py first for better accuracy\n")
+
         f.write(f"\n[Depth Statistics (meters)]\n")
         valid_depths = depth_raw[depth_raw > 0] / DEPTH_SCALE_FACTOR
         if len(valid_depths) > 0:
@@ -215,6 +255,9 @@ def main():
     camera_depth_scale = depth_sensor.get_depth_scale()
 
     print(f"✓ RealSense深度スケール: {camera_depth_scale}")
+
+    # キャリブレーションデータ読み込み
+    calibration = load_calibration()
 
     align_to_color = rs.align(rs.stream.color)
     filters = setup_filters()
@@ -292,7 +335,8 @@ def main():
                 metadata = {
                     'timestamp': datetime.now().isoformat(),
                     'food_name': food_name,
-                    'frames_averaged': num_frames_to_average
+                    'frames_averaged': num_frames_to_average,
+                    'calibration': calibration
                 }
 
                 save_nutrition5k_format(avg_color, depth_n5k, depth_colorized, dish_id, metadata)
@@ -308,7 +352,8 @@ def main():
                 metadata = {
                     'timestamp': datetime.now().isoformat(),
                     'food_name': food_name,
-                    'frames_averaged': 1
+                    'frames_averaged': 1,
+                    'calibration': calibration
                 }
 
                 save_nutrition5k_format(color_preview, depth_n5k, depth_colorized, dish_id, metadata)
