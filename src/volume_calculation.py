@@ -254,6 +254,132 @@ class VolumeCalculator:
 
         return result
 
+    def calculate_volume_depth_difference(
+        self,
+        depth_image: np.ndarray,
+        food_mask: np.ndarray,
+        bowl_mesh_aligned: o3d.geometry.TriangleMesh,
+        camera_intrinsics: Dict,
+        depth_scale: float = 0.0001
+    ) -> Dict:
+        """
+        深度差分積分法による体積計算
+
+        お椀の3D形状を基準面として使用し、
+        各ピクセルでお椀底面までの距離をレイキャストで取得して積分
+
+        Args:
+            depth_image: 深度画像 (H, W) 16-bit
+            food_mask: 食品マスク (H, W) bool
+            bowl_mesh_aligned: ICPで位置合わせ済みのお椀メッシュ
+            camera_intrinsics: カメラ内部パラメータ
+            depth_scale: 深度スケール（m/unit）
+
+        Returns:
+            result: {
+                'volume_ml': 体積（ml）,
+                'volume_cm3': 体積（cm³）,
+                'method': 'depth_difference_integration',
+                'num_pixels': 総ピクセル数,
+                'num_valid_pixels': 有効ピクセル数,
+                'mean_height_mm': 平均高さ（mm）,
+                'max_height_mm': 最大高さ（mm）,
+                'min_height_mm': 最小高さ（mm）
+            }
+        """
+        # raycast_utilsをインポート
+        from .raycast_utils import raycast_bowl_surface, compute_pixel_area
+
+        print(f"\n体積計算（深度差分積分法）...")
+        print(f"  方法: お椀3D形状を基準面として使用")
+
+        h, w = depth_image.shape
+        fx = camera_intrinsics['fx']
+
+        # 1. 食品領域のピクセル座標取得
+        v_coords, u_coords = np.where(food_mask)
+        pixel_coords = np.column_stack([u_coords, v_coords])
+        N = len(pixel_coords)
+
+        print(f"  食品ピクセル数: {N:,}")
+
+        if N == 0:
+            print("  ⚠️ 食品ピクセルが見つかりません")
+            return {
+                'volume_ml': 0,
+                'volume_cm3': 0,
+                'method': 'depth_difference_integration',
+                'num_pixels': 0,
+                'num_valid_pixels': 0,
+                'mean_height_mm': 0,
+                'max_height_mm': 0,
+                'min_height_mm': 0
+            }
+
+        # 2. 深度カメラから食品表面までの距離
+        food_depths_mm = depth_image[v_coords, u_coords] * depth_scale * 1000
+
+        # 3. お椀底面までの距離（レイキャスト）
+        print(f"  レイキャスト実行中...")
+        bowl_depths_mm, hit_mask = raycast_bowl_surface(
+            bowl_mesh_aligned,
+            pixel_coords,
+            camera_intrinsics,
+            verbose=True
+        )
+
+        # 4. 食品の高さ = お椀底面 - 食品表面
+        food_heights_mm = bowl_depths_mm - food_depths_mm
+
+        # 5. 有効な高さのみ（正の値 かつ レイがヒット）
+        valid_mask = (food_heights_mm > 0) & hit_mask
+        food_heights_valid = food_heights_mm[valid_mask]
+        food_depths_valid = food_depths_mm[valid_mask]
+
+        num_valid = valid_mask.sum()
+        print(f"  有効ピクセル: {num_valid:,} / {N:,} ({num_valid/N*100:.1f}%)")
+
+        if num_valid == 0:
+            print("  ⚠️ 有効なピクセルがありません")
+            return {
+                'volume_ml': 0,
+                'volume_cm3': 0,
+                'method': 'depth_difference_integration',
+                'num_pixels': N,
+                'num_valid_pixels': 0,
+                'mean_height_mm': 0,
+                'max_height_mm': 0,
+                'min_height_mm': 0
+            }
+
+        # 6. 各ピクセルの面積計算（距離依存）
+        pixel_areas_mm2 = (food_depths_valid / fx) ** 2
+
+        # 7. 体積積分
+        volume_mm3 = np.sum(food_heights_valid * pixel_areas_mm2)
+        volume_ml = volume_mm3 / 1000
+
+        # 8. 統計情報
+        result = {
+            'volume_ml': volume_ml,
+            'volume_cm3': volume_ml,
+            'method': 'depth_difference_integration',
+            'num_pixels': N,
+            'num_valid_pixels': num_valid,
+            'mean_height_mm': food_heights_valid.mean(),
+            'max_height_mm': food_heights_valid.max(),
+            'min_height_mm': food_heights_valid.min(),
+            'std_height_mm': food_heights_valid.std()
+        }
+
+        print(f"  ✓ 体積計算完了")
+        print(f"    体積: {volume_ml:.1f} ml")
+        print(f"    平均高さ: {result['mean_height_mm']:.1f} mm")
+        print(f"    最大高さ: {result['max_height_mm']:.1f} mm")
+        print(f"    最小高さ: {result['min_height_mm']:.1f} mm")
+
+        return result
+
 
 def depth_to_pointcloud(
     depth_image: np.ndarray,
