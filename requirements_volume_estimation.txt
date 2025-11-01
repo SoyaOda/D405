@@ -1,0 +1,60 @@
+# Food Volume Estimation Dependencies
+#
+# インストール方法:
+#   pip install -r requirements_volume_estimation.txt
+#
+# または個別にインストール:
+#   1. SAM2.1のインストール
+#   2. その他の依存関係
+
+# ===== Core Dependencies =====
+
+# NumPy: 数値計算
+numpy>=1.24.0
+
+# OpenCV: 画像処理
+opencv-python>=4.8.0
+
+# Open3D: 3D処理・ICP
+open3d>=0.18.0
+
+# SciPy: 科学計算
+scipy>=1.11.0
+
+# PyTorch: SAM2.1用（CUDA版の場合は別途インストール）
+# CPU版
+torch>=2.5.1
+torchvision>=0.20.1
+
+# GPU版の場合は以下をコメントアウト解除（CUDA 12.1用）
+# torch>=2.5.1+cu121
+# torchvision>=0.20.1+cu121
+
+# ===== SAM2.1 =====
+#
+# SAM2.1は別途GitHubからインストール必要:
+#   git clone https://github.com/facebookresearch/sam2.git
+#   cd sam2
+#   pip install -e .
+#
+# または以下のコマンドで直接インストール:
+#   pip install git+https://github.com/facebookresearch/sam2.git
+
+# ===== RealSense Dependencies =====
+
+# pyrealsense2: RealSenseカメラSDK（macOS用）
+pyrealsense2-macosx>=2.54.2; sys_platform == 'darwin'
+
+# pyrealsense2: RealSenseカメラSDK（Linux/Windows用）
+pyrealsense2>=2.54.2; sys_platform != 'darwin'
+
+# ===== Optional: 可視化・解析 =====
+
+# Matplotlib: グラフ描画
+matplotlib>=3.7.0
+
+# Pillow: 画像処理
+Pillow>=10.0.0
+
+# tqdm: 進捗バー
+tqdm>=4.65.0

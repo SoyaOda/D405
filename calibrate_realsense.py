@@ -191,9 +191,10 @@ def run_tare_calibration(ground_truth_mm_input=None):
         print("\n処理には数秒〜数十秒かかります。お待ちください...")
 
         # キャリブレーション設定（JSON）
+        # Intel公式サンプルに準拠したキー名を使用
         calibration_config = {
-            "accuracy": "high",  # high, medium, low
-            "scan": "standard",  # standard, white_wall
+            "accuracy": 2,          # 0=very_high, 1=high, 2=medium, 3=low
+            "scan parameter": 0,    # 0=intrinsic, 1=extrinsic（キー名にスペース必須）
         }
         args = json.dumps(calibration_config)
 
@@ -203,7 +204,7 @@ def run_tare_calibration(ground_truth_mm_input=None):
         # Tare Calibration実行
         print("\nキャリブレーション実行中...\n")
         table, health = adev.run_tare_calibration(
-            target_z,
+            float(target_z),  # 明示的にfloatに変換
             args,
             progress_callback,
             30000  # 30秒タイムアウト
@@ -222,15 +223,20 @@ def run_tare_calibration(ground_truth_mm_input=None):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         metadata_path = os.path.join(CALIBRATION_DIR, f"calibration_{timestamp}.json")
 
+        # Accuracy名変換
+        accuracy_names = {0: "very_high", 1: "high", 2: "medium", 3: "low"}
+        scan_names = {0: "intrinsic", 1: "extrinsic"}
+
         metadata = {
             "timestamp": datetime.now().isoformat(),
-            "ground_truth_mm": target_z,
-            "ground_truth_cm": target_z / 10,
-            "ground_truth_m": target_z / 1000,
+            "ground_truth_mm": float(target_z),
+            "ground_truth_cm": float(target_z) / 10,
+            "ground_truth_m": float(target_z) / 1000,
+            "table_distance_m": float(target_z) / 1000,  # nutrition5k_style_scanner.pyとの互換性
             "health": health,
             "depth_scale": depth_scale,
-            "accuracy": calibration_config["accuracy"],
-            "scan_type": calibration_config["scan"],
+            "accuracy": accuracy_names.get(calibration_config["accuracy"], "medium"),
+            "scan_type": scan_names.get(calibration_config["scan parameter"], "intrinsic"),
             "device_serial": dev.get_info(rs.camera_info.serial_number),
             "firmware_version": dev.get_info(rs.camera_info.firmware_version),
         }
@@ -239,6 +245,12 @@ def run_tare_calibration(ground_truth_mm_input=None):
             json.dump(metadata, f, indent=2)
 
         print(f"\nメタデータ保存: {metadata_path}")
+
+        # 最新のキャリブレーションデータをnutrition5k_style_scanner.py用にコピー
+        calibration_data_path = "/Users/moei/program/D405/calibration_data.json"
+        with open(calibration_data_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        print(f"キャリブレーションデータ: {calibration_data_path}")
 
         # 検証: キャリブレーション後の深度測定
         print("\n" + "=" * 70)
