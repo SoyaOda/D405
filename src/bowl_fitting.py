@@ -199,51 +199,27 @@ class BowlFitter:
 
     def _measure_diameter(self, points: np.ndarray) -> float:
         """
-        点群のリム（最上部）直径を測定
+        点群の最大直径を測定
 
-        お椀の開口部（リム）の直径を測定するため、
-        Z座標が最大付近の点を使用します。
+        X-Y平面での点群の最大直径を測定します。
+        重心から最も遠い点までの距離の2倍として計算します。
 
         Args:
             points: 点群 (N, 3) [x, y, z]
 
         Returns:
-            diameter: リム直径（mm）
+            diameter: 直径（mm）
         """
-        from sklearn.decomposition import PCA
+        # 重心計算
+        center = points.mean(axis=0)
 
-        # PCAで主軸を特定
-        pca = PCA(n_components=3)
-        centered = points - points.mean(axis=0)
-        pca.fit(centered)
+        # X-Y平面での距離計算
+        xy_points = points[:, :2]
+        center_xy = center[:2]
+        distances = np.linalg.norm(xy_points - center_xy, axis=1)
 
-        # 垂直軸（PC3: 最小分散軸）
-        vertical_axis = pca.components_[2]
-
-        # 垂直軸への投影
-        vertical_projections = centered @ vertical_axis
-
-        # リム部分（上位5%）の点を抽出
-        rim_threshold = np.percentile(vertical_projections, 95)
-        rim_mask = vertical_projections > rim_threshold
-        rim_points = points[rim_mask]
-
-        if len(rim_points) < 3:
-            # フォールバック: 全点を使用
-            print("  ⚠️ リム点数不足、全点を使用")
-            rim_points = points
-
-        # リム点を水平面（PC1-PC2）に投影
-        horizontal_axes = pca.components_[:2]
-        rim_centered = rim_points - points.mean(axis=0)
-        rim_horizontal = rim_centered @ horizontal_axes.T
-
-        # 各主軸での範囲
-        pc1_range = rim_horizontal[:, 0].max() - rim_horizontal[:, 0].min()
-        pc2_range = rim_horizontal[:, 1].max() - rim_horizontal[:, 1].min()
-
-        # 最大直径（楕円の長軸）
-        diameter = max(pc1_range, pc2_range)
+        # 最大直径 = 最大距離の2倍
+        diameter = distances.max() * 2
 
         return diameter
 
